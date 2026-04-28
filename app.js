@@ -1757,8 +1757,23 @@ async function mudarPerfil(uid,novoPerfil){
   const old=allProfiles.find(p=>p.id===uid);
   if(!old)return;
   const oldPerfil=old.perfil;
-  await sb.from("profiles").update({perfil:novoPerfil,updated_at:new Date().toISOString()}).eq("id",uid);
-  await audit("Mudar perfil","profiles",uid,{de:oldPerfil,para:novoPerfil});
+
+  // Se bixo → moradora, perguntar novo apelido antes de salvar
+  if(oldPerfil==="bixo"&&novoPerfil==="moradora"){
+    const novoApelido=await pedirApelidoMoradora(old.apelido||old.nome);
+    if(novoApelido===null){loadAdmin();return;}// cancelou: reverte select visualmente
+    const updateData={perfil:novoPerfil,updated_at:new Date().toISOString()};
+    if(novoApelido.trim())updateData.apelido=novoApelido.trim();
+    await sb.from("profiles").update(updateData).eq("id",uid);
+    await audit("Mudar perfil","profiles",uid,{de:oldPerfil,para:novoPerfil,novoApelido:novoApelido.trim()||undefined});
+    if(novoApelido.trim())old.apelido=novoApelido.trim();
+  }else{
+    await sb.from("profiles").update({perfil:novoPerfil,updated_at:new Date().toISOString()}).eq("id",uid);
+    await audit("Mudar perfil","profiles",uid,{de:oldPerfil,para:novoPerfil});
+  }
+
+  old.perfil=novoPerfil;
+
   // Se bixo → moradora, disparar joia
   if(oldPerfil==="bixo"&&novoPerfil==="moradora"){
     const{data:cfg}=await sb.from("config").select("salario_minimo").eq("id",1).single();
@@ -1773,8 +1788,33 @@ async function mudarPerfil(uid,novoPerfil){
       toast("Joia de entrada criada automaticamente!");
     }
   }
-  old.perfil=novoPerfil;
   toast("Perfil atualizado!");loadAdmin();
+}
+
+// Abre modal pedindo novo apelido ao promover bixo → moradora
+function pedirApelidoMoradora(apelidoAtual){
+  return new Promise(resolve=>{
+    const overlay=document.getElementById("modalOverlay");
+    const title=document.getElementById("modalTitle");
+    const body=document.getElementById("modalBody");
+    title.textContent="🎉 Promovendo para Moradora";
+    body.innerHTML=`
+      <p style="font-size:13px;color:#57534e;margin:0 0 16px">A bixo está se tornando moradora! Você pode atualizar o apelido dela agora.</p>
+      <div style="margin-bottom:16px">
+        <label>Apelido de moradora</label>
+        <input type="text" id="novoApelidoInput" placeholder="${apelidoAtual}" value="${apelidoAtual}" style="font-size:14px">
+        <p style="font-size:11px;color:#a8a29e;margin:4px 0 0">Deixe em branco para manter o apelido atual.</p>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-secondary" id="apelidoCancelarBtn">Cancelar</button>
+        <button class="btn btn-primary" id="apelidoConfirmarBtn"><i class="fas fa-check"></i>Confirmar</button>
+      </div>`;
+    overlay.style.display="block";
+    setTimeout(()=>document.getElementById("novoApelidoInput")?.focus(),100);
+    function cleanup(val){overlay.style.display="none";resolve(val);}
+    document.getElementById("apelidoConfirmarBtn").onclick=()=>cleanup(document.getElementById("novoApelidoInput").value);
+    document.getElementById("apelidoCancelarBtn").onclick=()=>cleanup(null);
+  });
 }
 
 async function salvarConfig(){
