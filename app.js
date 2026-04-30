@@ -1921,3 +1921,6 @@ async function salvarConfig(){
   await audit("Salvar config","config","1",{nome,salario});
   toast("Configurações salvas!");
 }
+function abrirExAlunas() {
+  alert("Abrir Ex-Alunas");
+}
